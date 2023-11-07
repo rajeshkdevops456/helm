@@ -1,0 +1,149 @@
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v3
+    # Scan Iac with kics
+    - name: run kics Scan
+      uses: checkmarx/kics-github-action@v1.7.0
+      with:
+        # scanning two directories: ./terraform/ ./cfn-templates/ plus a single file
+        path: 'terraform,cfn-templates,my-other-sub-folder/Dockerfile'
+        output_path: myResults/
+    # Display the results in json format
+    - name: display kics results
+      run: |
+        cat myResults/results.json
+    steps:
+    - uses: actions/checkout@v3
+    - name: run kics Scan
+      uses: checkmarx/kics-github-action@v1.7.0
+      with:
+        path: 'terraform'
+        ignore_on_exit: results
+        output_path: myResults/
+    - name: display kics results
+      run: |
+        cat myResults/results.json
+    steps:
+    - uses: actions/checkout@v3
+    - name: run kics Scan
+      uses: checkmarx/kics-github-action@v1.7.0
+      with:
+        path: 'terraform,my-other-sub-folder/Dockerfile'
+        fail_on: high,medium
+        output_path: myResults/
+    - name: display kics results
+      run: |
+        cat myResults/results.json
+name: Test KICS action PR comment
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: run kics Scan
+      uses: checkmarx/kics-github-action@v1.7.0
+      with:
+        path: test/samples/positive1.tf,test/samples/positive2.tf
+        token: ${{ secrets.GITHUB_TOKEN }}
+        output_path: myResults/
+        ignore_on_exit: results
+        enable_comments: true
+    steps:
+      - uses: actions/checkout@v3
+      - name: run kics Scan
+        uses: checkmarx/kics-github-action@v1.7.0
+        with:
+          path: 'terraform'
+          profiling: MEM
+          output_path: myResults/
+      - name: display kics results
+        run: |
+          cat myResults/results.json
+name: scan with KICS and upload SARIF
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  kics-job:
+    runs-on: ubuntu-latest
+    name: kics-action
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Mkdir results-dir
+        # make sure results dir is created
+        run: mkdir -p results-dir
+      - name: Run KICS Scan with SARIF result
+        uses: checkmarx/kics-github-action@v1.7.0
+        with:
+          path: 'terraform'
+          # when provided with a directory on output_path
+          # it will generate the specified reports file named 'results.{extension}'
+          # in this example it will generate:
+          # - results-dir/results.json
+          # - results-dir/results.sarif
+          output_path: results-dir
+          platform_type: terraform
+          output_formats: 'json,sarif'
+          exclude_paths: "terraform/gcp/big_data.tf,terraform/azure"
+          # seek query id in it's metadata.json
+          exclude_queries: 0437633b-daa6-4bbc-8526-c0d2443b946e
+      - name: Show results
+        run: |
+          cat results-dir/results.sarif
+          cat results-dir/results.json
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v1
+        with:
+          sarif_file: results-dir/results.sarif
+name: scan with KICS using config file
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  kics-job:
+    runs-on: ubuntu-latest
+    name: kics-action
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+      - name: Mkdir results-dir
+        # make sure results dir is created
+        run: mkdir -p results-dir
+      - name: Create config file
+        # creating a heredoc config file
+        run: |
+          cat <<EOF >>kics.config
+          {
+            "exclude-categories": "Encryption",
+            "exclude-paths": "terraform/gcp/big_data.tf,terraform/gcp/gcs.tf",
+            "log-file": true,
+            "minimal-ui": false,
+            "no-color": false,
+            "no-progress": true,
+            "output-path": "./results-dir",
+            "payload-path": "file path to store source internal representation in JSON format",
+            "preview-lines": 5,
+            "report-formats": "json,sarif",
+            "type": "terraform",
+            "verbose": true
+          }
+          EOF
+      - name: Run KICS Scan using config
+        uses: checkmarx/kics-github-action@v1.7.0
+        with:
+          path: 'terraform'
+          config_path: ./kics.config
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v1
+        with:
+          sarif_file: results-dir/results.sarif
