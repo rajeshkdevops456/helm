@@ -1,0 +1,29 @@
+name: CodeBuild Workflow
+on: [push]
+jobs:
+  build:
+    name: Run CodeBuild
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Run CodeBuild project
+        id: codebuild
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: MyCodeBuildProject
+      - name: Report build status
+        if: always()
+        run: |
+          if [ "${{ steps.codebuild.outputs.build-status }}" == "SUCCEEDED" ]; then
+            echo "CodeBuild succeeded"
+          else
+            echo "CodeBuild failed"
+            exit 1
+          fi
